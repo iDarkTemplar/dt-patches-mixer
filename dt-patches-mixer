@@ -1,0 +1,194 @@
+#!/bin/bash
+
+CONF=$1
+DIR=
+MERGE_METHOD=
+MERGE_CONFLICTS=
+
+# If config file is not present, abort
+if [ ! -f "${CONF}" ] ; then
+	echo "Error: \"${CONF}\" is not a valid config file"
+	exit 1
+fi
+
+repo_items_count=0
+
+while read -r line ; do
+	if [ ! -z "$line" ] ; then
+		case $line in
+			DIR=*)
+				if [ -n "${DIR}" ] ; then
+					echo "Error: option DIR is provided multiple times in config file \"${CONF}\""
+					exit 1
+				fi
+
+				DIR="${line#DIR=}"
+				;;
+			MERGE_METHOD=*)
+				if [ -n "${MERGE_METHOD}" ] ; then
+					echo "Error: option MERGE_METHOD is provided multiple times in config file \"${CONF}\""
+					exit 1
+				fi
+
+				MERGE_METHOD="${line#MERGE_METHOD=}"
+
+				case "${MERGE_METHOD}" in
+					merge) ;;
+					read-tree) ;;
+					*)
+						echo "Error: unsupported MERGE_METHOD \"${MERGE_METHOD}\" is specified in config file \"${CONF}\""
+						exit 1
+						;;
+				esac
+				;;
+			MERGE_CONFLICTS=*)
+				if [ -n "${MERGE_CONFLICTS}" ] ; then
+					echo "Error: option MERGE_CONFLICTS is provided multiple times in config file \"${CONF}\""
+					exit 1
+				fi
+
+				MERGE_CONFLICTS="${line#MERGE_CONFLICTS=}"
+				;;
+			REPO=*)
+				set -- $(echo $line | sed -e 's:#.*$::')
+
+				if [ ! -z "$2" ] && [ ! -z "$3" ] ; then
+					eval repo_name_${repo_items_count}="${1#REPO=}"
+					eval repo_remote_${repo_items_count}="$2"
+					eval repo_branch_${repo_items_count}_0="$3"
+					eval repo_branches_count_${repo_items_count}=1
+
+					while [ ! -z "$(eval echo \$$(expr $(eval echo \${repo_branches_count_${repo_items_count}}) + 3))" ] ; do
+						eval repo_branch_${repo_items_count}_$(eval echo \${repo_branches_count_${repo_items_count}})=$(eval echo \$$(expr $(eval echo \${repo_branches_count_${repo_items_count}}) + 3))
+						eval repo_branches_count_${repo_items_count}=$(expr $(eval echo \$repo_branches_count_${repo_items_count}) + 1)
+					done
+
+					repo_items_count=$(expr ${repo_items_count} + 1)
+				fi
+				;;
+		esac
+	fi
+done < "${CONF}"
+
+# Check config sanity: make sure that there is no repo with same name
+for i in $(seq 0 $(expr ${repo_items_count} - 1)) ; do
+	for k in $(seq $(expr $i + 1) $(expr ${repo_items_count} - 1)) ; do
+		if [ "$(eval echo \$repo_name_$i)" = "$(eval echo \$repo_name_$k)" ] ; then
+			echo "Error: repository name \"$(eval echo \$repo_name_$i)\" is provided multiple times in config file \"${CONF}\""
+			exit 1
+		fi
+	done
+done
+
+# Check config sanity: make sure that for every repo every branch is specified only once
+for i in $(seq 0 $(expr ${repo_items_count} - 1)) ; do
+	for j in $(seq 0 $(expr $(eval echo \${repo_branches_count_$i}) - 1)) ; do
+		for k in $(seq $(expr $j + 1) $(expr $(eval echo \${repo_branches_count_$i}) - 1)) ; do
+			if [ "$(eval echo $\repo_branch_${i}_${j})" = "$(eval echo $\repo_branch_${i}_${k})" ] ; then
+				echo "Error: repository \"$(eval echo \$repo_name_$i)\" specifies branch \"$(eval echo $\repo_branch_${i}_${j})\" multiple times in config file \"${CONF}\""
+				exit 1
+			fi
+		done
+	done
+done
+
+# If dir is not present, abort
+if [ ! -d "${DIR}" ] ; then
+	echo "Error: \"${DIR}\" is not a valid directory"
+	exit 1
+fi
+
+if [ -z "${MERGE_METHOD}" ] ; then
+	echo "Error: MERGE_METHOD is not specified in config file \"${CONF}\""
+	exit 1
+fi
+
+cd "${DIR}"
+if [ $? -ne 0 ] ; then
+	echo "Error: failed to change directory to \"${DIR}\""
+	exit 1
+fi
+
+# Initialize git if necessary
+if [ ! -d "${DIR}/.git" ] ; then
+	git init
+	git commit --allow-empty -m "Initial commit"
+	git tag restore-tag
+fi
+
+for remote in $(git remote) ; do
+	git remote remove "${remote}"
+done
+
+# this is needed in order to remove patches from repos and branches no longer in config file
+git reset --hard restore-tag
+
+if [ $(git branch 2>/dev/null | grep temp_branch | wc -l) -ne 0 ] ; then
+	git branch -D temp_branch
+fi
+
+# add all remotes
+for i in $(seq 0 $(expr ${repo_items_count} - 1)) ; do
+	git remote add "$(eval echo \$repo_name_$i)" "$(eval echo \$repo_remote_$i)"
+	if [ $? -ne 0 ] ; then
+		echo "Error: failed to add remote repository $(eval echo \$repo_name_$i) at \"$(eval echo \$repo_remote_$i)\""
+		exit 1
+	fi
+
+	git fetch "$(eval echo \$repo_name_$i)"
+	if [ $? -ne 0 ] ; then
+		echo "Error: failed to fetch repository \"$(eval echo \$repo_name_$i)\""
+		exit 1
+	fi
+done
+
+# now merge in every mentioned branch. If something fails, abort with message
+for i in $(seq 0 $(expr ${repo_items_count} - 1)) ; do
+	for j in $(seq 0 $(expr $(eval echo \${repo_branches_count_$i}) - 1)) ; do
+		echo "Merging $(eval echo \$repo_name_$i)/$(eval echo $\repo_branch_${i}_${j})"
+
+		case "${MERGE_METHOD}" in
+			merge)
+				git merge ${MERGE_CONFLICTS} --allow-unrelated-histories "$(eval echo \$repo_name_$i)/$(eval echo $\repo_branch_${i}_${j})" -m "Merge in $(eval echo \$repo_name_$i)/$(eval echo $\repo_branch_${i}_${j})"
+				if [ $? -ne 0 ] ; then
+					git merge --abort
+					echo "Error: failed to merge in $(eval echo \$repo_name_$i)/$(eval echo $\repo_branch_${i}_${j})"
+					exit 1
+				fi
+				;;
+			read-tree)
+				git checkout -b temp_branch restore-tag
+
+				git read-tree "$(eval echo \$repo_name_$i)/$(eval echo $\repo_branch_${i}_${j})"
+				if [ $? -ne 0 ] ; then
+					git reset HEAD .
+					git checkout -- .
+					git checkout master
+					echo "Error: failed to merge in $(eval echo \$repo_name_$i)/$(eval echo $\repo_branch_${i}_${j})"
+					exit 1
+				fi
+
+				git commit -m "Checkout $(eval echo \$repo_name_$i)/$(eval echo $\repo_branch_${i}_${j})"
+				if [ $? -ne 0 ] ; then
+					git reset HEAD .
+					git checkout -- .
+					git checkout master
+					echo "Error: failed to merge in $(eval echo \$repo_name_$i)/$(eval echo $\repo_branch_${i}_${j})"
+					exit 1
+				fi
+
+				git checkout -- .
+				git checkout master
+
+				git merge ${MERGE_CONFLICTS} temp_branch -m "Merge in $(eval echo \$repo_name_$i)/$(eval echo $\repo_branch_${i}_${j})"
+				if [ $? -ne 0 ] ; then
+					git merge --abort
+					echo "Error: failed to merge in $(eval echo \$repo_name_$i)/$(eval echo $\repo_branch_${i}_${j})"
+					exit 1
+				fi
+
+				git branch -d temp_branch
+				;;
+		esac
+	done
+done
