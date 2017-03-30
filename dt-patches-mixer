@@ -4,6 +4,7 @@ CONF=$1
 DIR=
 MERGE_METHOD=
 MERGE_CONFLICTS=
+VERBOSE=
 
 # If config file is not present, abort
 if [ ! -f "${CONF}" ] ; then
@@ -48,6 +49,14 @@ while read -r line ; do
 				fi
 
 				MERGE_CONFLICTS="${line#MERGE_CONFLICTS=}"
+				;;
+			VERBOSE=*)
+				if [ -n "${VERBOSE}" ] ; then
+					echo "Error: option VERBOSE is provided multiple times in config file \"${CONF}\""
+					exit 1
+				fi
+
+				VERBOSE="${line#VERBOSE=}"
 				;;
 			REPO=*)
 				set -- $(echo $line | sed -e 's:#.*$::')
@@ -109,33 +118,42 @@ if [ $? -ne 0 ] ; then
 	exit 1
 fi
 
+if [ "${VERBOSE}" != "1" ] ; then
+	exec 11> /dev/null
+	exec 12> /dev/null
+else
+	exec 11>&1
+	exec 12>&2
+fi
+
+
 # Initialize git if necessary
 if [ ! -d "${DIR}/.git" ] ; then
-	git init
-	git commit --allow-empty -m "Initial commit"
-	git tag restore-tag
+	git init 1>&11 2>&12
+	git commit --allow-empty -m "Initial commit" 1>&11 2>&12
+	git tag restore-tag 1>&11 2>&12
 fi
 
 for remote in $(git remote) ; do
-	git remote remove "${remote}"
+	git remote remove "${remote}" 1>&11 2>&12
 done
 
 # this is needed in order to remove patches from repos and branches no longer in config file
-git reset --hard restore-tag
+git reset --hard restore-tag 1>&11 2>&12
 
 if [ $(git branch 2>/dev/null | grep temp_branch | wc -l) -ne 0 ] ; then
-	git branch -D temp_branch
+	git branch -D temp_branch 1>&11 2>&12
 fi
 
 # add all remotes
 for i in $(seq 0 $(expr ${repo_items_count} - 1)) ; do
-	git remote add "$(eval echo \$repo_name_$i)" "$(eval echo \$repo_remote_$i)"
+	git remote add "$(eval echo \$repo_name_$i)" "$(eval echo \$repo_remote_$i)" 1>&11 2>&12
 	if [ $? -ne 0 ] ; then
 		echo "Error: failed to add remote repository $(eval echo \$repo_name_$i) at \"$(eval echo \$repo_remote_$i)\""
 		exit 1
 	fi
 
-	git fetch "$(eval echo \$repo_name_$i)"
+	git fetch "$(eval echo \$repo_name_$i)" 1>&11 2>&12
 	if [ $? -ne 0 ] ; then
 		echo "Error: failed to fetch repository \"$(eval echo \$repo_name_$i)\""
 		exit 1
@@ -149,46 +167,48 @@ for i in $(seq 0 $(expr ${repo_items_count} - 1)) ; do
 
 		case "${MERGE_METHOD}" in
 			merge)
-				git merge ${MERGE_CONFLICTS} --allow-unrelated-histories "$(eval echo \$repo_name_$i)/$(eval echo $\repo_branch_${i}_${j})" -m "Merge in $(eval echo \$repo_name_$i)/$(eval echo $\repo_branch_${i}_${j})"
+				git merge ${MERGE_CONFLICTS} --allow-unrelated-histories "$(eval echo \$repo_name_$i)/$(eval echo $\repo_branch_${i}_${j})" -m "Merge in $(eval echo \$repo_name_$i)/$(eval echo $\repo_branch_${i}_${j})" 1>&11 2>&12
 				if [ $? -ne 0 ] ; then
-					git merge --abort
+					git merge --abort 1>&11 2>&12
 					echo "Error: failed to merge in $(eval echo \$repo_name_$i)/$(eval echo $\repo_branch_${i}_${j})"
 					exit 1
 				fi
 				;;
 			read-tree)
-				git checkout -b temp_branch restore-tag
+				git checkout -b temp_branch restore-tag 1>&11 2>&12
 
-				git read-tree "$(eval echo \$repo_name_$i)/$(eval echo $\repo_branch_${i}_${j})"
+				git read-tree "$(eval echo \$repo_name_$i)/$(eval echo $\repo_branch_${i}_${j})" 1>&11 2>&12
 				if [ $? -ne 0 ] ; then
-					git reset HEAD .
-					git checkout -- .
-					git checkout master
+					git reset HEAD . 1>&11 2>&12
+					git checkout -- . 1>&11 2>&12
+					git checkout master 1>&11 2>&12
 					echo "Error: failed to merge in $(eval echo \$repo_name_$i)/$(eval echo $\repo_branch_${i}_${j})"
 					exit 1
 				fi
 
-				git commit -m "Checkout $(eval echo \$repo_name_$i)/$(eval echo $\repo_branch_${i}_${j})"
+				git commit -m "Checkout $(eval echo \$repo_name_$i)/$(eval echo $\repo_branch_${i}_${j})" 1>&11 2>&12
 				if [ $? -ne 0 ] ; then
-					git reset HEAD .
-					git checkout -- .
-					git checkout master
+					git reset HEAD . 1>&11 2>&12
+					git checkout -- . 1>&11 2>&12
+					git checkout master 1>&11 2>&12
 					echo "Error: failed to merge in $(eval echo \$repo_name_$i)/$(eval echo $\repo_branch_${i}_${j})"
 					exit 1
 				fi
 
-				git checkout -- .
-				git checkout master
+				git checkout -- . 1>&11 2>&12
+				git checkout master 1>&11 2>&12
 
-				git merge ${MERGE_CONFLICTS} temp_branch -m "Merge in $(eval echo \$repo_name_$i)/$(eval echo $\repo_branch_${i}_${j})"
+				git merge ${MERGE_CONFLICTS} temp_branch -m "Merge in $(eval echo \$repo_name_$i)/$(eval echo $\repo_branch_${i}_${j})" 1>&11 2>&12
 				if [ $? -ne 0 ] ; then
-					git merge --abort
+					git merge --abort 1>&11 2>&12
 					echo "Error: failed to merge in $(eval echo \$repo_name_$i)/$(eval echo $\repo_branch_${i}_${j})"
 					exit 1
 				fi
 
-				git branch -d temp_branch
+				git branch -d temp_branch 1>&11 2>&12
 				;;
 		esac
 	done
 done
+
+echo "Patches successfully mixed"
