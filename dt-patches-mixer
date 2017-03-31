@@ -129,7 +129,10 @@ fi
 
 # Initialize git if necessary
 if [ ! -d "${DIR}/.git" ] ; then
+	echo "Performing initial configuration in the target directory"
 	git init 1>&11 2>&12
+	git config user.name "dt-patches-mixer" 1>&11 2>&12
+	git config user.email "dt-patches-mixer@localhost" 1>&11 2>&12
 	git commit --allow-empty -m "Initial commit" 1>&11 2>&12
 	git tag restore-tag 1>&11 2>&12
 fi
