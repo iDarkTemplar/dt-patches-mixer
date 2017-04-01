@@ -1,4 +1,22 @@
 #!/bin/bash
+#
+# Copyright (C) 2017 i.Dark_Templar <darktemplar@dark-templar-archives.net>
+#
+# This file is part of DT Patches Mixer.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
 
 CONF=$1
 DIR=
@@ -6,9 +24,14 @@ MERGE_METHOD=
 MERGE_CONFLICTS=
 VERBOSE=
 
+if [ -z "$1" ] ; then
+	echo "USAGE: $0 config_file" 1>&2
+	exit 1
+fi
+
 # If config file is not present, abort
 if [ ! -f "${CONF}" ] ; then
-	echo "Error: \"${CONF}\" is not a valid config file"
+	echo "Error: \"${CONF}\" is not a valid config file" 1>&2
 	exit 1
 fi
 
@@ -19,7 +42,7 @@ while read -r line ; do
 		case $line in
 			DIR=*)
 				if [ -n "${DIR}" ] ; then
-					echo "Error: option DIR is provided multiple times in config file \"${CONF}\""
+					echo "Error: option DIR is provided multiple times in config file \"${CONF}\"" 1>&2
 					exit 1
 				fi
 
@@ -27,7 +50,7 @@ while read -r line ; do
 				;;
 			MERGE_METHOD=*)
 				if [ -n "${MERGE_METHOD}" ] ; then
-					echo "Error: option MERGE_METHOD is provided multiple times in config file \"${CONF}\""
+					echo "Error: option MERGE_METHOD is provided multiple times in config file \"${CONF}\"" 1>&2
 					exit 1
 				fi
 
@@ -37,14 +60,14 @@ while read -r line ; do
 					merge) ;;
 					read-tree) ;;
 					*)
-						echo "Error: unsupported MERGE_METHOD \"${MERGE_METHOD}\" is specified in config file \"${CONF}\""
+						echo "Error: unsupported MERGE_METHOD \"${MERGE_METHOD}\" is specified in config file \"${CONF}\"" 1>&2
 						exit 1
 						;;
 				esac
 				;;
 			MERGE_CONFLICTS=*)
 				if [ -n "${MERGE_CONFLICTS}" ] ; then
-					echo "Error: option MERGE_CONFLICTS is provided multiple times in config file \"${CONF}\""
+					echo "Error: option MERGE_CONFLICTS is provided multiple times in config file \"${CONF}\"" 1>&2
 					exit 1
 				fi
 
@@ -52,7 +75,7 @@ while read -r line ; do
 				;;
 			VERBOSE=*)
 				if [ -n "${VERBOSE}" ] ; then
-					echo "Error: option VERBOSE is provided multiple times in config file \"${CONF}\""
+					echo "Error: option VERBOSE is provided multiple times in config file \"${CONF}\"" 1>&2
 					exit 1
 				fi
 
@@ -83,7 +106,7 @@ done < "${CONF}"
 for i in $(seq 0 $(expr ${repo_items_count} - 1)) ; do
 	for k in $(seq $(expr $i + 1) $(expr ${repo_items_count} - 1)) ; do
 		if [ "$(eval echo \$repo_name_$i)" = "$(eval echo \$repo_name_$k)" ] ; then
-			echo "Error: repository name \"$(eval echo \$repo_name_$i)\" is provided multiple times in config file \"${CONF}\""
+			echo "Error: repository name \"$(eval echo \$repo_name_$i)\" is provided multiple times in config file \"${CONF}\"" 1>&2
 			exit 1
 		fi
 	done
@@ -94,7 +117,7 @@ for i in $(seq 0 $(expr ${repo_items_count} - 1)) ; do
 	for j in $(seq 0 $(expr $(eval echo \${repo_branches_count_$i}) - 1)) ; do
 		for k in $(seq $(expr $j + 1) $(expr $(eval echo \${repo_branches_count_$i}) - 1)) ; do
 			if [ "$(eval echo $\repo_branch_${i}_${j})" = "$(eval echo $\repo_branch_${i}_${k})" ] ; then
-				echo "Error: repository \"$(eval echo \$repo_name_$i)\" specifies branch \"$(eval echo $\repo_branch_${i}_${j})\" multiple times in config file \"${CONF}\""
+				echo "Error: repository \"$(eval echo \$repo_name_$i)\" specifies branch \"$(eval echo $\repo_branch_${i}_${j})\" multiple times in config file \"${CONF}\"" 1>&2
 				exit 1
 			fi
 		done
@@ -103,18 +126,18 @@ done
 
 # If dir is not present, abort
 if [ ! -d "${DIR}" ] ; then
-	echo "Error: \"${DIR}\" is not a valid directory"
+	echo "Error: \"${DIR}\" is not a valid directory" 1>&2
 	exit 1
 fi
 
 if [ -z "${MERGE_METHOD}" ] ; then
-	echo "Error: MERGE_METHOD is not specified in config file \"${CONF}\""
+	echo "Error: MERGE_METHOD is not specified in config file \"${CONF}\"" 1>&2
 	exit 1
 fi
 
 cd "${DIR}"
 if [ $? -ne 0 ] ; then
-	echo "Error: failed to change directory to \"${DIR}\""
+	echo "Error: failed to change directory to \"${DIR}\"" 1>&2
 	exit 1
 fi
 
@@ -152,13 +175,13 @@ fi
 for i in $(seq 0 $(expr ${repo_items_count} - 1)) ; do
 	git remote add "$(eval echo \$repo_name_$i)" "$(eval echo \$repo_remote_$i)" 1>&11 2>&12
 	if [ $? -ne 0 ] ; then
-		echo "Error: failed to add remote repository $(eval echo \$repo_name_$i) at \"$(eval echo \$repo_remote_$i)\""
+		echo "Error: failed to add remote repository $(eval echo \$repo_name_$i) at \"$(eval echo \$repo_remote_$i)\"" 1>&2
 		exit 1
 	fi
 
 	git fetch "$(eval echo \$repo_name_$i)" 1>&11 2>&12
 	if [ $? -ne 0 ] ; then
-		echo "Error: failed to fetch repository \"$(eval echo \$repo_name_$i)\""
+		echo "Error: failed to fetch repository \"$(eval echo \$repo_name_$i)\"" 1>&2
 		exit 1
 	fi
 done
@@ -173,7 +196,7 @@ for i in $(seq 0 $(expr ${repo_items_count} - 1)) ; do
 				git merge ${MERGE_CONFLICTS} --allow-unrelated-histories "$(eval echo \$repo_name_$i)/$(eval echo $\repo_branch_${i}_${j})" -m "Merge in $(eval echo \$repo_name_$i)/$(eval echo $\repo_branch_${i}_${j})" 1>&11 2>&12
 				if [ $? -ne 0 ] ; then
 					git merge --abort 1>&11 2>&12
-					echo "Error: failed to merge in $(eval echo \$repo_name_$i)/$(eval echo $\repo_branch_${i}_${j})"
+					echo "Error: failed to merge in $(eval echo \$repo_name_$i)/$(eval echo $\repo_branch_${i}_${j})" 1>&2
 					exit 1
 				fi
 				;;
@@ -185,7 +208,7 @@ for i in $(seq 0 $(expr ${repo_items_count} - 1)) ; do
 					git reset HEAD . 1>&11 2>&12
 					git checkout -- . 1>&11 2>&12
 					git checkout master 1>&11 2>&12
-					echo "Error: failed to merge in $(eval echo \$repo_name_$i)/$(eval echo $\repo_branch_${i}_${j})"
+					echo "Error: failed to merge in $(eval echo \$repo_name_$i)/$(eval echo $\repo_branch_${i}_${j})" 1>&2
 					exit 1
 				fi
 
@@ -194,7 +217,7 @@ for i in $(seq 0 $(expr ${repo_items_count} - 1)) ; do
 					git reset HEAD . 1>&11 2>&12
 					git checkout -- . 1>&11 2>&12
 					git checkout master 1>&11 2>&12
-					echo "Error: failed to merge in $(eval echo \$repo_name_$i)/$(eval echo $\repo_branch_${i}_${j})"
+					echo "Error: failed to merge in $(eval echo \$repo_name_$i)/$(eval echo $\repo_branch_${i}_${j})" 1>&2
 					exit 1
 				fi
 
@@ -204,7 +227,7 @@ for i in $(seq 0 $(expr ${repo_items_count} - 1)) ; do
 				git merge ${MERGE_CONFLICTS} temp_branch -m "Merge in $(eval echo \$repo_name_$i)/$(eval echo $\repo_branch_${i}_${j})" 1>&11 2>&12
 				if [ $? -ne 0 ] ; then
 					git merge --abort 1>&11 2>&12
-					echo "Error: failed to merge in $(eval echo \$repo_name_$i)/$(eval echo $\repo_branch_${i}_${j})"
+					echo "Error: failed to merge in $(eval echo \$repo_name_$i)/$(eval echo $\repo_branch_${i}_${j})" 1>&2
 					exit 1
 				fi
 

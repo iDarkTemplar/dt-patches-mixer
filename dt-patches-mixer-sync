@@ -1,2 +1,2 @@
 #!/bin/sh
-[ -x /usr/sbin/dt-patches-mixer ] && [ -f /etc/dt-patches-mixer.conf ] && /usr/sbin/dt-patches-mixer /etc/dt-patches-mixer.conf
+[ -x /usr/bin/dt-patches-mixer ] && [ -f /etc/dt-patches-mixer.conf ] && /usr/sbin/dt-patches-mixer /etc/dt-patches-mixer.conf

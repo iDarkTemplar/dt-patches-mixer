@@ -1,0 +1,11 @@
+dt-patches-mixer is a script for combining parts of multiple git repositories into one.
+
+It's primary use is to combine patches for Gentoo packages from multiple sources.
+
+How to use it for mixing patches:
+	1) create empty directory, default config suggests /var/lib/dt-patches-mixer
+		if directory /etc/portage/patches is empty or doesn't exist, it may be used, and steps 2 and 3 skipped
+	2) backup portage patches directory if it exists, currently it's /etc/portage/patches
+	3) if dt-patches-mixer directory isn't set to point to portage patches directory, make a symlink like:
+		ln -sv /var/lib/dt-patches-mixer /etc/portage/patches
+	4) run dt-patches-mixer manually, or do a portage synchronization of postsync hook is installed
