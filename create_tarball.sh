@@ -33,11 +33,5 @@ fi
 
 cd "${project_dir}"
 
-extra_excludes=
-
-if [ -f .gitignore ] ; then
-	extra_excludes=--exclude-from=.gitignore
-fi
-
-tar -cjvf "${output_dir}/$filename" ${extra_excludes} --exclude=".git" .
+tar --owner=root --group=root --mtime="$(git log -1 --format=%ci --no-show-signature)" -cjvf "${output_dir}/$filename" $(git ls-files | grep -v '^create_tarball.sh$')
 echo "Created \"${output_dir}/$filename\""
