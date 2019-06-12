@@ -187,12 +187,14 @@ fi
 for i in $(seq 0 $(expr ${repo_items_count} - 1)) ; do
 	git remote add "$(eval echo \$repo_name_$i)" "$(eval echo \$repo_remote_$i)" 1>&11 2>&12
 	if [ $? -ne 0 ] ; then
+		git reset --hard last-version 1>&11 2>&12
 		echo "Error: failed to add remote repository $(eval echo \$repo_name_$i) at \"$(eval echo \$repo_remote_$i)\"" 1>&2
 		exit 1
 	fi
 
 	git fetch "$(eval echo \$repo_name_$i)" 1>&11 2>&12
 	if [ $? -ne 0 ] ; then
+		git reset --hard last-version 1>&11 2>&12
 		echo "Error: failed to fetch repository \"$(eval echo \$repo_name_$i)\"" 1>&2
 		exit 1
 	fi
@@ -206,7 +208,6 @@ for i in $(seq 0 $(expr ${repo_items_count} - 1)) ; do
 
 			GNUPGHOME="$(eval echo \$repo_gpg_home_$i)" git verify-commit "$(eval echo \$repo_name_$i)/$(eval echo $\repo_branch_${i}_${j} | cut -d : -f 1)" 1>&11 2>&12
 			if [ $? -ne 0 ] ; then
-				git checkout master 1>&11 2>&12
 				git reset --hard restore-tag 1>&11 2>&12
 				git reset --hard last-version 1>&11 2>&12
 				echo "Error: verification of $(eval echo \$repo_name_$i)/$(eval echo $\repo_branch_${i}_${j} | cut -d : -f 1) failed" 1>&2
@@ -221,6 +222,8 @@ for i in $(seq 0 $(expr ${repo_items_count} - 1)) ; do
 				git merge ${MERGE_CONFLICTS} --allow-unrelated-histories "$(eval echo \$repo_name_$i)/$(eval echo $\repo_branch_${i}_${j})" -m "Merge in $(eval echo \$repo_name_$i)/$(eval echo $\repo_branch_${i}_${j})" 1>&11 2>&12
 				if [ $? -ne 0 ] ; then
 					git merge --abort 1>&11 2>&12
+					git reset --hard restore-tag 1>&11 2>&12
+					git reset --hard last-version 1>&11 2>&12
 					echo "Error: failed to merge in $(eval echo \$repo_name_$i)/$(eval echo $\repo_branch_${i}_${j})" 1>&2
 					exit 1
 				fi
@@ -233,6 +236,9 @@ for i in $(seq 0 $(expr ${repo_items_count} - 1)) ; do
 					git reset HEAD . 1>&11 2>&12
 					git checkout -- . 1>&11 2>&12
 					git checkout master 1>&11 2>&12
+					git branch -D temp_branch 1>&11 2>&12
+					git reset --hard restore-tag 1>&11 2>&12
+					git reset --hard last-version 1>&11 2>&12
 					echo "Error: failed to merge in $(eval echo \$repo_name_$i)/$(eval echo $\repo_branch_${i}_${j})" 1>&2
 					exit 1
 				fi
@@ -242,6 +248,9 @@ for i in $(seq 0 $(expr ${repo_items_count} - 1)) ; do
 					git reset HEAD . 1>&11 2>&12
 					git checkout -- . 1>&11 2>&12
 					git checkout master 1>&11 2>&12
+					git branch -D temp_branch 1>&11 2>&12
+					git reset --hard restore-tag 1>&11 2>&12
+					git reset --hard last-version 1>&11 2>&12
 					echo "Error: failed to merge in $(eval echo \$repo_name_$i)/$(eval echo $\repo_branch_${i}_${j})" 1>&2
 					exit 1
 				fi
@@ -252,11 +261,14 @@ for i in $(seq 0 $(expr ${repo_items_count} - 1)) ; do
 				git merge ${MERGE_CONFLICTS} temp_branch -m "Merge in $(eval echo \$repo_name_$i)/$(eval echo $\repo_branch_${i}_${j})" 1>&11 2>&12
 				if [ $? -ne 0 ] ; then
 					git merge --abort 1>&11 2>&12
+					git branch -D temp_branch 1>&11 2>&12
+					git reset --hard restore-tag 1>&11 2>&12
+					git reset --hard last-version 1>&11 2>&12
 					echo "Error: failed to merge in $(eval echo \$repo_name_$i)/$(eval echo $\repo_branch_${i}_${j})" 1>&2
 					exit 1
 				fi
 
-				git branch -d temp_branch 1>&11 2>&12
+				git branch -D temp_branch 1>&11 2>&12
 				;;
 		esac
 	done
