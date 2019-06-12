@@ -38,7 +38,7 @@ fi
 repo_items_count=0
 
 while read -r line ; do
-	if [ ! -z "$line" ] ; then
+	if [ -n "$line" ] ; then
 		case $line in
 			DIR=*)
 				if [ -n "${DIR}" ] ; then
@@ -84,15 +84,27 @@ while read -r line ; do
 			REPO=*)
 				set -- $(echo $line | sed -e 's:#.*$::')
 
-				if [ ! -z "$2" ] && [ ! -z "$3" ] ; then
+				if [ -n "$2" ] && [ -n "$3" ] ; then
 					eval repo_name_${repo_items_count}="${1#REPO=}"
 					eval repo_remote_${repo_items_count}="$2"
-					eval repo_branch_${repo_items_count}_0="$3"
-					eval repo_branches_count_${repo_items_count}=1
+					eval repo_branches_count_${repo_items_count}=0
+					eval repo_gpg_home_${repo_items_count}=""
+					value_index=3
 
-					while [ ! -z "$(eval echo \$$(expr $(eval echo \${repo_branches_count_${repo_items_count}}) + 3))" ] ; do
-						eval repo_branch_${repo_items_count}_$(eval echo \${repo_branches_count_${repo_items_count}})=$(eval echo \$$(expr $(eval echo \${repo_branches_count_${repo_items_count}}) + 3))
-						eval repo_branches_count_${repo_items_count}=$(expr $(eval echo \$repo_branches_count_${repo_items_count}) + 1)
+					while [ -n "$(eval echo \$$value_index)" ] ; do
+						value=$(eval echo \$$value_index)
+
+						case $value in
+							gpg=*)
+								eval repo_gpg_home_${repo_items_count}="${value#gpg=}"
+								;;
+							*)
+								eval repo_branch_${repo_items_count}_$(eval echo \${repo_branches_count_${repo_items_count}})="$value"
+								eval repo_branches_count_${repo_items_count}=$(expr $(eval echo \$repo_branches_count_${repo_items_count}) + 1)
+								;;
+						esac
+
+						eval value_index=$(expr $value_index + 1)
 					done
 
 					repo_items_count=$(expr ${repo_items_count} + 1)
@@ -189,6 +201,17 @@ done
 # now merge in every mentioned branch. If something fails, abort with message
 for i in $(seq 0 $(expr ${repo_items_count} - 1)) ; do
 	for j in $(seq 0 $(expr $(eval echo \${repo_branches_count_$i}) - 1)) ; do
+		if [ -n "$(eval echo \$repo_gpg_home_$i)" ] ; then
+			echo "Verifying $(eval echo \$repo_name_$i)/$(eval echo $\repo_branch_${i}_${j} | cut -d : -f 1)"
+
+			GNUPGHOME="$(eval echo \$repo_gpg_home_$i)" git verify-commit "$(eval echo \$repo_name_$i)/$(eval echo $\repo_branch_${i}_${j} | cut -d : -f 1)" 1>/dev/null 2>/dev/null
+			if [ $? -ne 0 ] ; then
+				echo "Error: verification of $(eval echo \$repo_name_$i)/$(eval echo $\repo_branch_${i}_${j} | cut -d : -f 1) failed" 1>&2
+				# TODO: rollback to last version
+				exit 1
+			fi
+		fi
+
 		echo "Merging $(eval echo \$repo_name_$i)/$(eval echo $\repo_branch_${i}_${j})"
 
 		case "${MERGE_METHOD}" in
