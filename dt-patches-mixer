@@ -204,10 +204,12 @@ for i in $(seq 0 $(expr ${repo_items_count} - 1)) ; do
 		if [ -n "$(eval echo \$repo_gpg_home_$i)" ] ; then
 			echo "Verifying $(eval echo \$repo_name_$i)/$(eval echo $\repo_branch_${i}_${j} | cut -d : -f 1)"
 
-			GNUPGHOME="$(eval echo \$repo_gpg_home_$i)" git verify-commit "$(eval echo \$repo_name_$i)/$(eval echo $\repo_branch_${i}_${j} | cut -d : -f 1)" 1>/dev/null 2>/dev/null
+			GNUPGHOME="$(eval echo \$repo_gpg_home_$i)" git verify-commit "$(eval echo \$repo_name_$i)/$(eval echo $\repo_branch_${i}_${j} | cut -d : -f 1)" 1>&11 2>&12
 			if [ $? -ne 0 ] ; then
+				git checkout master 1>&11 2>&12
+				git reset --hard restore-tag 1>&11 2>&12
+				git reset --hard last-version 1>&11 2>&12
 				echo "Error: verification of $(eval echo \$repo_name_$i)/$(eval echo $\repo_branch_${i}_${j} | cut -d : -f 1) failed" 1>&2
-				# TODO: rollback to last version
 				exit 1
 			fi
 		fi
@@ -259,5 +261,7 @@ for i in $(seq 0 $(expr ${repo_items_count} - 1)) ; do
 		esac
 	done
 done
+
+git tag -f last-version 1>&11 2>&12
 
 echo "Patches successfully mixed"
