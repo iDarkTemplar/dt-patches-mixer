@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Copyright (C) 2017 i.Dark_Templar <darktemplar@dark-templar-archives.net>
+# Copyright (C) 2017-2021 i.Dark_Templar <darktemplar@dark-templar-archives.net>
 #
 # This file is part of DT Patches Mixer.
 #
@@ -207,12 +207,26 @@ for i in $(seq 0 $(expr ${repo_items_count} - 1)) ; do
 		if [ -n "$(eval echo \$repo_gpg_home_$i)" ] ; then
 			echo "Verifying $(eval echo \$repo_name_$i)/$(eval echo $\repo_branch_${i}_${j} | cut -d : -f 1)"
 
-			GNUPGHOME="$(eval echo \$repo_gpg_home_$i)" git verify-commit "$(eval echo \$repo_name_$i)/$(eval echo $\repo_branch_${i}_${j} | cut -d : -f 1)" 1>&11 2>&12
+			repo_gpg_tmp_home="$(mktemp -d)"
 			if [ $? -ne 0 ] ; then
+				git reset --hard last-version 1>&11 2>&12
+				echo "Error: verification of $(eval echo \$repo_name_$i)/$(eval echo $\repo_branch_${i}_${j} | cut -d : -f 1) failed: can't create temporary directory" 1>&2
+				exit 1
+			fi
+
+			for file in "$(eval echo \$repo_gpg_home_$i)"/*.asc ; do
+				GNUPGHOME="${repo_gpg_tmp_home}" gpg --import "$file"
+			done
+
+			GNUPGHOME="${repo_gpg_tmp_home}" git verify-commit "$(eval echo \$repo_name_$i)/$(eval echo $\repo_branch_${i}_${j} | cut -d : -f 1)" 1>&11 2>&12
+			if [ $? -ne 0 ] ; then
+				rm -rf "${repo_gpg_tmp_home}"
 				git reset --hard last-version 1>&11 2>&12
 				echo "Error: verification of $(eval echo \$repo_name_$i)/$(eval echo $\repo_branch_${i}_${j} | cut -d : -f 1) failed" 1>&2
 				exit 1
 			fi
+
+			rm -rf "${repo_gpg_tmp_home}"
 		fi
 
 		echo "Merging $(eval echo \$repo_name_$i)/$(eval echo $\repo_branch_${i}_${j})"
