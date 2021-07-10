@@ -215,7 +215,7 @@ for i in $(seq 0 $(expr ${repo_items_count} - 1)) ; do
 			fi
 
 			for file in "$(eval echo \$repo_gpg_home_$i)"/*.asc ; do
-				GNUPGHOME="${repo_gpg_tmp_home}" gpg --import "$file"
+				GNUPGHOME="${repo_gpg_tmp_home}" gpg --import "$file" 1>&11 2>&12
 			done
 
 			GNUPGHOME="${repo_gpg_tmp_home}" git verify-commit "$(eval echo \$repo_name_$i)/$(eval echo $\repo_branch_${i}_${j} | cut -d : -f 1)" 1>&11 2>&12
