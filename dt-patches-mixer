@@ -170,6 +170,7 @@ if [ ! -d "${DIR}/.git" ] ; then
 	git config user.email "dt-patches-mixer@localhost" 1>&11 2>&12
 	git commit --allow-empty -m "Initial commit" 1>&11 2>&12
 	git tag restore-tag 1>&11 2>&12
+	git tag last-version 1>&11 2>&12
 fi
 
 for remote in $(git remote) ; do
@@ -208,7 +209,6 @@ for i in $(seq 0 $(expr ${repo_items_count} - 1)) ; do
 
 			GNUPGHOME="$(eval echo \$repo_gpg_home_$i)" git verify-commit "$(eval echo \$repo_name_$i)/$(eval echo $\repo_branch_${i}_${j} | cut -d : -f 1)" 1>&11 2>&12
 			if [ $? -ne 0 ] ; then
-				git reset --hard restore-tag 1>&11 2>&12
 				git reset --hard last-version 1>&11 2>&12
 				echo "Error: verification of $(eval echo \$repo_name_$i)/$(eval echo $\repo_branch_${i}_${j} | cut -d : -f 1) failed" 1>&2
 				exit 1
@@ -222,7 +222,6 @@ for i in $(seq 0 $(expr ${repo_items_count} - 1)) ; do
 				git merge ${MERGE_CONFLICTS} --allow-unrelated-histories "$(eval echo \$repo_name_$i)/$(eval echo $\repo_branch_${i}_${j})" -m "Merge in $(eval echo \$repo_name_$i)/$(eval echo $\repo_branch_${i}_${j})" 1>&11 2>&12
 				if [ $? -ne 0 ] ; then
 					git merge --abort 1>&11 2>&12
-					git reset --hard restore-tag 1>&11 2>&12
 					git reset --hard last-version 1>&11 2>&12
 					echo "Error: failed to merge in $(eval echo \$repo_name_$i)/$(eval echo $\repo_branch_${i}_${j})" 1>&2
 					exit 1
@@ -237,7 +236,6 @@ for i in $(seq 0 $(expr ${repo_items_count} - 1)) ; do
 					git checkout -- . 1>&11 2>&12
 					git checkout master 1>&11 2>&12
 					git branch -D temp_branch 1>&11 2>&12
-					git reset --hard restore-tag 1>&11 2>&12
 					git reset --hard last-version 1>&11 2>&12
 					echo "Error: failed to merge in $(eval echo \$repo_name_$i)/$(eval echo $\repo_branch_${i}_${j})" 1>&2
 					exit 1
@@ -249,7 +247,6 @@ for i in $(seq 0 $(expr ${repo_items_count} - 1)) ; do
 					git checkout -- . 1>&11 2>&12
 					git checkout master 1>&11 2>&12
 					git branch -D temp_branch 1>&11 2>&12
-					git reset --hard restore-tag 1>&11 2>&12
 					git reset --hard last-version 1>&11 2>&12
 					echo "Error: failed to merge in $(eval echo \$repo_name_$i)/$(eval echo $\repo_branch_${i}_${j})" 1>&2
 					exit 1
@@ -262,7 +259,6 @@ for i in $(seq 0 $(expr ${repo_items_count} - 1)) ; do
 				if [ $? -ne 0 ] ; then
 					git merge --abort 1>&11 2>&12
 					git branch -D temp_branch 1>&11 2>&12
-					git reset --hard restore-tag 1>&11 2>&12
 					git reset --hard last-version 1>&11 2>&12
 					echo "Error: failed to merge in $(eval echo \$repo_name_$i)/$(eval echo $\repo_branch_${i}_${j})" 1>&2
 					exit 1
