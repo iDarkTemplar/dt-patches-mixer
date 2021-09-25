@@ -89,6 +89,7 @@ while read -r line ; do
 					eval repo_remote_${repo_items_count}="$2"
 					eval repo_branches_count_${repo_items_count}=0
 					eval repo_gpg_home_${repo_items_count}=""
+					eval repo_destination_prefix_${repo_items_count}=""
 					value_index=3
 
 					while [ -n "$(eval echo \$$value_index)" ] ; do
@@ -97,6 +98,9 @@ while read -r line ; do
 						case $value in
 							gpg=*)
 								eval repo_gpg_home_${repo_items_count}="${value#gpg=}"
+								;;
+							prefix=*)
+								eval repo_destination_prefix_${repo_items_count}="${value#prefix=}"
 								;;
 							*)
 								eval repo_branch_${repo_items_count}_$(eval echo \${repo_branches_count_${repo_items_count}})="$value"
@@ -244,7 +248,13 @@ for i in $(seq 0 $(expr ${repo_items_count} - 1)) ; do
 			read-tree)
 				git checkout -b temp_branch restore-tag 1>&11 2>&12
 
-				git read-tree "$(eval echo \$repo_name_$i)/$(eval echo $\repo_branch_${i}_${j})" 1>&11 2>&12
+				prefixcmd=""
+
+				if [ -n "$(eval echo \$repo_destination_prefix_$i)" ] ; then
+					prefixcmd="--prefix=$(eval echo \$repo_destination_prefix_$i)"
+				fi
+
+				git read-tree ${prefixcmd} "$(eval echo \$repo_name_$i)/$(eval echo $\repo_branch_${i}_${j})" 1>&11 2>&12
 				if [ $? -ne 0 ] ; then
 					git reset HEAD . 1>&11 2>&12
 					git checkout -- . 1>&11 2>&12
@@ -266,7 +276,7 @@ for i in $(seq 0 $(expr ${repo_items_count} - 1)) ; do
 					exit 1
 				fi
 
-				git checkout -- . 1>&11 2>&12
+				git checkout -- 1>&11 2>&12
 				git checkout master 1>&11 2>&12
 
 				git merge ${MERGE_CONFLICTS} temp_branch -m "Merge in $(eval echo \$repo_name_$i)/$(eval echo $\repo_branch_${i}_${j})" 1>&11 2>&12
