@@ -85,6 +85,7 @@ while read -r line ; do
 				set -- $(echo $line | sed -e 's:#.*$::')
 
 				if [ -n "$2" ] && [ -n "$3" ] ; then
+					eval repo_type_${repo_items_count}="repo"
 					eval repo_name_${repo_items_count}="${1#REPO=}"
 					eval repo_remote_${repo_items_count}="$2"
 					eval repo_branches_count_${repo_items_count}=0
@@ -114,6 +115,11 @@ while read -r line ; do
 					repo_items_count=$(expr ${repo_items_count} + 1)
 				fi
 				;;
+			RM=*)
+				eval repo_type_${repo_items_count}="rm"
+				eval repo_rm_destination_${repo_items_count}="${line#RM=}"
+				repo_items_count=$(expr ${repo_items_count} + 1)
+				;;
 		esac
 	fi
 done < "${CONF}"
@@ -121,7 +127,7 @@ done < "${CONF}"
 # Check config sanity: make sure that there is no repo with same name
 for i in $(seq 0 $(expr ${repo_items_count} - 1)) ; do
 	for k in $(seq $(expr $i + 1) $(expr ${repo_items_count} - 1)) ; do
-		if [ "$(eval echo \$repo_name_$i)" = "$(eval echo \$repo_name_$k)" ] ; then
+		if [ "$(eval echo \$repo_type_$i)" = "repo" ] && [ "$(eval echo \$repo_type_$k)" = "repo" ] && [ "$(eval echo \$repo_name_$i)" = "$(eval echo \$repo_name_$k)" ] ; then
 			echo "Error: repository name \"$(eval echo \$repo_name_$i)\" is provided multiple times in config file \"${CONF}\"" 1>&2
 			exit 1
 		fi
@@ -130,14 +136,16 @@ done
 
 # Check config sanity: make sure that for every repo every branch is specified only once
 for i in $(seq 0 $(expr ${repo_items_count} - 1)) ; do
-	for j in $(seq 0 $(expr $(eval echo \${repo_branches_count_$i}) - 1)) ; do
-		for k in $(seq $(expr $j + 1) $(expr $(eval echo \${repo_branches_count_$i}) - 1)) ; do
-			if [ "$(eval echo $\repo_branch_${i}_${j})" = "$(eval echo $\repo_branch_${i}_${k})" ] ; then
-				echo "Error: repository \"$(eval echo \$repo_name_$i)\" specifies branch \"$(eval echo $\repo_branch_${i}_${j})\" multiple times in config file \"${CONF}\"" 1>&2
-				exit 1
-			fi
+	if [ "$(eval echo \$repo_type_$i)" = "repo" ] ; then
+		for j in $(seq 0 $(expr $(eval echo \${repo_branches_count_$i}) - 1)) ; do
+			for k in $(seq $(expr $j + 1) $(expr $(eval echo \${repo_branches_count_$i}) - 1)) ; do
+				if [ "$(eval echo $\repo_branch_${i}_${j})" = "$(eval echo $\repo_branch_${i}_${k})" ] ; then
+					echo "Error: repository \"$(eval echo \$repo_name_$i)\" specifies branch \"$(eval echo $\repo_branch_${i}_${j})\" multiple times in config file \"${CONF}\"" 1>&2
+					exit 1
+				fi
+			done
 		done
-	done
+	fi
 done
 
 # If dir is not present, abort
@@ -190,108 +198,124 @@ fi
 
 # add all remotes
 for i in $(seq 0 $(expr ${repo_items_count} - 1)) ; do
-	git remote add "$(eval echo \$repo_name_$i)" "$(eval echo \$repo_remote_$i)" 1>&11 2>&12
-	if [ $? -ne 0 ] ; then
-		git reset --hard last-version 1>&11 2>&12
-		echo "Error: failed to add remote repository $(eval echo \$repo_name_$i) at \"$(eval echo \$repo_remote_$i)\"" 1>&2
-		exit 1
-	fi
+	if [ "$(eval echo \$repo_type_$i)" = "repo" ] ; then
+		git remote add "$(eval echo \$repo_name_$i)" "$(eval echo \$repo_remote_$i)" 1>&11 2>&12
+		if [ $? -ne 0 ] ; then
+			git reset --hard last-version 1>&11 2>&12
+			echo "Error: failed to add remote repository $(eval echo \$repo_name_$i) at \"$(eval echo \$repo_remote_$i)\"" 1>&2
+			exit 1
+		fi
 
-	git fetch "$(eval echo \$repo_name_$i)" 1>&11 2>&12
-	if [ $? -ne 0 ] ; then
-		git reset --hard last-version 1>&11 2>&12
-		echo "Error: failed to fetch repository \"$(eval echo \$repo_name_$i)\"" 1>&2
-		exit 1
+		git fetch "$(eval echo \$repo_name_$i)" 1>&11 2>&12
+		if [ $? -ne 0 ] ; then
+			git reset --hard last-version 1>&11 2>&12
+			echo "Error: failed to fetch repository \"$(eval echo \$repo_name_$i)\"" 1>&2
+			exit 1
+		fi
 	fi
 done
 
 # now merge in every mentioned branch. If something fails, abort with message
 for i in $(seq 0 $(expr ${repo_items_count} - 1)) ; do
-	for j in $(seq 0 $(expr $(eval echo \${repo_branches_count_$i}) - 1)) ; do
-		if [ -n "$(eval echo \$repo_gpg_home_$i)" ] ; then
-			echo "Verifying $(eval echo \$repo_name_$i)/$(eval echo $\repo_branch_${i}_${j} | cut -d : -f 1)"
+	case "$(eval echo \$repo_type_$i)" in
+		repo)
+			for j in $(seq 0 $(expr $(eval echo \${repo_branches_count_$i}) - 1)) ; do
+				if [ -n "$(eval echo \$repo_gpg_home_$i)" ] ; then
+					echo "Verifying $(eval echo \$repo_name_$i)/$(eval echo $\repo_branch_${i}_${j} | cut -d : -f 1)"
 
-			repo_gpg_tmp_home="$(mktemp -d)"
-			if [ $? -ne 0 ] ; then
-				git reset --hard last-version 1>&11 2>&12
-				echo "Error: verification of $(eval echo \$repo_name_$i)/$(eval echo $\repo_branch_${i}_${j} | cut -d : -f 1) failed: can't create temporary directory" 1>&2
-				exit 1
-			fi
+					repo_gpg_tmp_home="$(mktemp -d)"
+					if [ $? -ne 0 ] ; then
+						git reset --hard last-version 1>&11 2>&12
+						echo "Error: verification of $(eval echo \$repo_name_$i)/$(eval echo $\repo_branch_${i}_${j} | cut -d : -f 1) failed: can't create temporary directory" 1>&2
+						exit 1
+					fi
 
-			for file in "$(eval echo \$repo_gpg_home_$i)"/*.asc ; do
-				GNUPGHOME="${repo_gpg_tmp_home}" gpg --import "$file" 1>&11 2>&12
+					for file in "$(eval echo \$repo_gpg_home_$i)"/*.asc ; do
+						GNUPGHOME="${repo_gpg_tmp_home}" gpg --import "$file" 1>&11 2>&12
+					done
+
+					GNUPGHOME="${repo_gpg_tmp_home}" git verify-commit "$(eval echo \$repo_name_$i)/$(eval echo $\repo_branch_${i}_${j} | cut -d : -f 1)" 1>&11 2>&12
+					if [ $? -ne 0 ] ; then
+						rm -rf "${repo_gpg_tmp_home}"
+						git reset --hard last-version 1>&11 2>&12
+						echo "Error: verification of $(eval echo \$repo_name_$i)/$(eval echo $\repo_branch_${i}_${j} | cut -d : -f 1) failed" 1>&2
+						exit 1
+					fi
+
+					rm -rf "${repo_gpg_tmp_home}"
+				fi
+
+				echo "Merging $(eval echo \$repo_name_$i)/$(eval echo $\repo_branch_${i}_${j})"
+
+				case "${MERGE_METHOD}" in
+					merge)
+						git merge ${MERGE_CONFLICTS} --allow-unrelated-histories "$(eval echo \$repo_name_$i)/$(eval echo $\repo_branch_${i}_${j})" -m "Merge in $(eval echo \$repo_name_$i)/$(eval echo $\repo_branch_${i}_${j})" 1>&11 2>&12
+						if [ $? -ne 0 ] ; then
+							git merge --abort 1>&11 2>&12
+							git reset --hard last-version 1>&11 2>&12
+							echo "Error: failed to merge in $(eval echo \$repo_name_$i)/$(eval echo $\repo_branch_${i}_${j})" 1>&2
+							exit 1
+						fi
+						;;
+					read-tree)
+						git checkout -b temp_branch restore-tag 1>&11 2>&12
+
+						prefixcmd=""
+
+						if [ -n "$(eval echo \$repo_destination_prefix_$i)" ] ; then
+							prefixcmd="--prefix=$(eval echo \$repo_destination_prefix_$i)"
+						fi
+
+						git read-tree ${prefixcmd} "$(eval echo \$repo_name_$i)/$(eval echo $\repo_branch_${i}_${j})" 1>&11 2>&12
+						if [ $? -ne 0 ] ; then
+							git reset HEAD . 1>&11 2>&12
+							git checkout -- . 1>&11 2>&12
+							git checkout master 1>&11 2>&12
+							git branch -D temp_branch 1>&11 2>&12
+							git reset --hard last-version 1>&11 2>&12
+							echo "Error: failed to merge in $(eval echo \$repo_name_$i)/$(eval echo $\repo_branch_${i}_${j})" 1>&2
+							exit 1
+						fi
+
+						git commit -m "Checkout $(eval echo \$repo_name_$i)/$(eval echo $\repo_branch_${i}_${j})" 1>&11 2>&12
+						if [ $? -ne 0 ] ; then
+							git reset HEAD . 1>&11 2>&12
+							git checkout -- . 1>&11 2>&12
+							git checkout master 1>&11 2>&12
+							git branch -D temp_branch 1>&11 2>&12
+							git reset --hard last-version 1>&11 2>&12
+							echo "Error: failed to merge in $(eval echo \$repo_name_$i)/$(eval echo $\repo_branch_${i}_${j})" 1>&2
+							exit 1
+						fi
+
+						git checkout -- 1>&11 2>&12
+						git checkout master 1>&11 2>&12
+
+						git merge ${MERGE_CONFLICTS} temp_branch -m "Merge in $(eval echo \$repo_name_$i)/$(eval echo $\repo_branch_${i}_${j})" 1>&11 2>&12
+						if [ $? -ne 0 ] ; then
+							git merge --abort 1>&11 2>&12
+							git branch -D temp_branch 1>&11 2>&12
+							git reset --hard last-version 1>&11 2>&12
+							echo "Error: failed to merge in $(eval echo \$repo_name_$i)/$(eval echo $\repo_branch_${i}_${j})" 1>&2
+							exit 1
+						fi
+
+						git branch -D temp_branch 1>&11 2>&12
+						;;
+				esac
 			done
-
-			GNUPGHOME="${repo_gpg_tmp_home}" git verify-commit "$(eval echo \$repo_name_$i)/$(eval echo $\repo_branch_${i}_${j} | cut -d : -f 1)" 1>&11 2>&12
-			if [ $? -ne 0 ] ; then
-				rm -rf "${repo_gpg_tmp_home}"
-				git reset --hard last-version 1>&11 2>&12
-				echo "Error: verification of $(eval echo \$repo_name_$i)/$(eval echo $\repo_branch_${i}_${j} | cut -d : -f 1) failed" 1>&2
-				exit 1
+			;;
+		rm)
+			git rm -r "$(eval echo \$repo_rm_destination_$i)" 1>&11 2>&12
+			if [ $? -eq 0 ] ; then
+				git commit -m "Remove $(eval echo \$repo_rm_destination_$i)" 1>&11 2>&12
+				echo "Removed $(eval echo \$repo_rm_destination_$i)"
+			else
+				# This error is non-fatal
+				echo "Failed to remove $(eval echo \$repo_rm_destination_$i)"
 			fi
-
-			rm -rf "${repo_gpg_tmp_home}"
-		fi
-
-		echo "Merging $(eval echo \$repo_name_$i)/$(eval echo $\repo_branch_${i}_${j})"
-
-		case "${MERGE_METHOD}" in
-			merge)
-				git merge ${MERGE_CONFLICTS} --allow-unrelated-histories "$(eval echo \$repo_name_$i)/$(eval echo $\repo_branch_${i}_${j})" -m "Merge in $(eval echo \$repo_name_$i)/$(eval echo $\repo_branch_${i}_${j})" 1>&11 2>&12
-				if [ $? -ne 0 ] ; then
-					git merge --abort 1>&11 2>&12
-					git reset --hard last-version 1>&11 2>&12
-					echo "Error: failed to merge in $(eval echo \$repo_name_$i)/$(eval echo $\repo_branch_${i}_${j})" 1>&2
-					exit 1
-				fi
-				;;
-			read-tree)
-				git checkout -b temp_branch restore-tag 1>&11 2>&12
-
-				prefixcmd=""
-
-				if [ -n "$(eval echo \$repo_destination_prefix_$i)" ] ; then
-					prefixcmd="--prefix=$(eval echo \$repo_destination_prefix_$i)"
-				fi
-
-				git read-tree ${prefixcmd} "$(eval echo \$repo_name_$i)/$(eval echo $\repo_branch_${i}_${j})" 1>&11 2>&12
-				if [ $? -ne 0 ] ; then
-					git reset HEAD . 1>&11 2>&12
-					git checkout -- . 1>&11 2>&12
-					git checkout master 1>&11 2>&12
-					git branch -D temp_branch 1>&11 2>&12
-					git reset --hard last-version 1>&11 2>&12
-					echo "Error: failed to merge in $(eval echo \$repo_name_$i)/$(eval echo $\repo_branch_${i}_${j})" 1>&2
-					exit 1
-				fi
-
-				git commit -m "Checkout $(eval echo \$repo_name_$i)/$(eval echo $\repo_branch_${i}_${j})" 1>&11 2>&12
-				if [ $? -ne 0 ] ; then
-					git reset HEAD . 1>&11 2>&12
-					git checkout -- . 1>&11 2>&12
-					git checkout master 1>&11 2>&12
-					git branch -D temp_branch 1>&11 2>&12
-					git reset --hard last-version 1>&11 2>&12
-					echo "Error: failed to merge in $(eval echo \$repo_name_$i)/$(eval echo $\repo_branch_${i}_${j})" 1>&2
-					exit 1
-				fi
-
-				git checkout -- 1>&11 2>&12
-				git checkout master 1>&11 2>&12
-
-				git merge ${MERGE_CONFLICTS} temp_branch -m "Merge in $(eval echo \$repo_name_$i)/$(eval echo $\repo_branch_${i}_${j})" 1>&11 2>&12
-				if [ $? -ne 0 ] ; then
-					git merge --abort 1>&11 2>&12
-					git branch -D temp_branch 1>&11 2>&12
-					git reset --hard last-version 1>&11 2>&12
-					echo "Error: failed to merge in $(eval echo \$repo_name_$i)/$(eval echo $\repo_branch_${i}_${j})" 1>&2
-					exit 1
-				fi
-
-				git branch -D temp_branch 1>&11 2>&12
-				;;
-		esac
-	done
+			;;
+	esac
 done
 
 git tag -f last-version 1>&11 2>&12
